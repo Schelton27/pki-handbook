@@ -1,0 +1,76 @@
+\subsubsection*{Bereitstellen der CRL über Apache}
+
+\paragraph*{Ablage der CRL auf dem Webserver}
+Auf der Ubuntu-VM wird zunächst das Verzeichnis für die CRL angelegt. Da Apache standardmäßig Dateien aus dem DocumentRoot-Verzeichnis ausliefert, wird das CRL-Verzeichnis dort erstellt:
+
+\begin{verbatim}
+sudo mkdir -p /var/www/html/crl
+\end{verbatim}
+
+Die zuvor exportierte Datei \texttt{cacrl.pem} wird in dieses Verzeichnis kopiert:
+
+\begin{verbatim}
+sudo cp /pfad/zur/cacrl.pem /var/www/html/crl/
+\end{verbatim}
+
+Damit Apache die Datei korrekt ausliefern kann, müssen die Berechtigungen gesetzt werden. Der Apache-Prozess läuft unter dem Benutzer \texttt{www-data} und benötigt Lesezugriff auf die CRL:
+
+\begin{verbatim}
+sudo chown www-data:www-data /var/www/html/crl/cacrl.pem
+sudo chmod 644 /var/www/html/crl/cacrl.pem
+\end{verbatim}
+
+Optional kann in der Apache-Konfiguration der MIME-Type für PEM-Dateien explizit gesetzt werden, was jedoch in den meisten Fällen nicht erforderlich ist, da Apache den Dateityp automatisch erkennt.
+
+\paragraph*{Optionale Konfiguration des MIME-Types}
+In den meisten Fällen erkennt Apache den Dateityp automatisch anhand der Dateiendung. Falls jedoch explizit festgelegt werden soll, dass PEM-Dateien als \texttt{application/x-pem-file} ausgeliefert werden, kann dies in der Apache-Konfiguration ergänzt werden.
+
+In der Datei \texttt{/etc/apache2/sites-available/000-default.conf} oder der entsprechenden Virtual-Host-Konfiguration kann folgender Eintrag innerhalb des \texttt{<VirtualHost *:80>}-Blocks hinzugefügt werden:
+
+\begin{verbatim}
+<Directory /var/www/html/crl>
+    <Files "*.pem">
+        Header set Content-Type "application/x-pem-file"
+    </Files>
+</Directory>
+\end{verbatim}
+
+Dieser Schritt ist jedoch **optional**, da Browser und CRL-Clients in der Regel auch ohne expliziten MIME-Type mit PEM-Dateien umgehen können.
+
+\paragraph*{Apache-Konfiguration testen und neu starten}
+Nach dem Platzieren der Datei wird die Apache-Konfiguration auf Syntaxfehler überprüft:
+
+\begin{verbatim}
+sudo apache2ctl configtest
+\end{verbatim}
+
+Anschließend muss Apache neu geladen werden, damit die Änderungen wirksam werden:
+
+\begin{verbatim}
+sudo systemctl restart apache2
+\end{verbatim}
+
+\subsubsection*{Überprüfung im Browser}
+
+Die Funktionsfähigkeit wird zunächst durch direkten Aufruf der CRL-URL im Browser getestet:
+
+\begin{verbatim}
+http://192.168.1.1/crl/cacrl.pem
+\end{verbatim}
+
+Der Browser sollte die CRL-Datei zum Download anbieten oder deren Inhalt anzeigen. Alternativ kann die Erreichbarkeit über die Kommandozeile getestet werden:
+
+\begin{verbatim}
+curl -I http://192.168.1.1/crl/cacrl.pem
+\end{verbatim}
+
+Eine erfolgreiche Antwort zeigt den HTTP-Statuscode \texttt{200 OK}.
+
+Abschließend wird das Serverzertifikat im Browser inspiziert. In den Zertifikatsdetails sollte unter \texttt{CRL Distribution Points} der konfigurierte Link erscheinen. Ein Klick auf diesen Link lädt die CRL erfolgreich, womit der Browser den Widerrufsstatus überprüfen kann.
+
+\subsubsection*{Ergebnis}
+
+Apache liefert statische Dateien automatisch aus dem DocumentRoot-Verzeichnis aus, sodass keine umfangreichen Konfigurationsänderungen erforderlich sind. Durch das korrekte Setzen der Dateiberechtigungen und das Ablegen der CRL im entsprechenden Verzeichnis kann der Browser die CRL erfolgreich finden und anzeigen. Damit ist der Widerrufsmechanismus funktional implementiert.
+
+\paragraph*{Hinweis zu HTTP vs. HTTPS}
+CRLs werden traditionell über unverschlüsseltes HTTP ausgeliefert, nicht über HTTPS. Dies ist sicherheitstechnisch unbedenklich, da die CRL selbst kryptographisch von der CA signiert ist und Clients diese Signatur überprüfen. Die Verwendung von HTTP vermeidet zudem ein Henne-Ei-Problem bei der Zertifikatsvalidierung.
